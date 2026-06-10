@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-instrument-serif), Georgia, serif;
+
+  /* Warm getintete Neutrals + Tannengruen als Akzent (siehe .impeccable.md) */
+  --color-canvas: oklch(98.6% 0.005 95);
+  --color-surface: oklch(99.4% 0.003 95);
+  --color-ink: oklch(24% 0.012 165);
+  --color-ink-soft: oklch(46% 0.014 165);
+  --color-ink-faint: oklch(64% 0.012 165);
+  --color-line: oklch(91% 0.008 120);
+  --color-line-strong: oklch(84% 0.01 120);
+
+  --color-tanne: oklch(42% 0.085 168);
+  --color-tanne-deep: oklch(34% 0.07 168);
+  --color-tanne-soft: oklch(95.5% 0.018 168);
+
+  --color-rot: oklch(52% 0.15 27);
+  --color-rot-soft: oklch(96% 0.018 27);
+
+  --color-gold: oklch(58% 0.115 78);
+  --color-gold-soft: oklch(96.5% 0.028 88);
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum"; /* tabellarische Ziffern: Scores bleiben vergleichbar */
+}
+
+::selection {
+  background: var(--color-tanne-soft);
+  color: var(--color-tanne-deep);
+}
+
+/* Sanfter Einstieg fuer Listen-Eintraege */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rise-in {
+  animation: rise-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise-in {
+    animation: none;
+  }
+}
