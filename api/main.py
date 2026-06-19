@@ -29,7 +29,7 @@ from core.config import (
     STELLE_PFAD,
 )
 from core.eingang import build_aufteilungs_chain, sortiere_pdf
-from core.llm import get_llm
+from core.llm import api_key_vorhanden, get_llm
 from core.pipeline import build_screening_pipeline
 from core.schemas import DOKUMENT_LABELS, GRUND_LABELS, KO_LABELS, KRITERIUM_LABELS
 
@@ -84,6 +84,16 @@ def _entwurf_oder_404(entwurf_id: int) -> dict:
     if entwurf is None:
         raise HTTPException(status_code=404, detail="Entwurf nicht gefunden.")
     return entwurf
+
+
+@app.get("/api/health")
+def health():
+    """Schnelle Selbstdiagnose: Ist der API-Key geladen? (Ohne den Key zu zeigen.)"""
+    return {
+        "ok": api_key_vorhanden(),
+        "api_key_geladen": api_key_vorhanden(),
+        "modell": MODELL_NAME,
+    }
 
 
 @app.get("/api/stelle")

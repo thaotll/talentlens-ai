@@ -30,6 +30,14 @@ export async function fetchKonfiguration(): Promise<Konfiguration> {
   return json(await fetch("/api/konfiguration"));
 }
 
+export async function fetchHealth(): Promise<{
+  ok: boolean;
+  api_key_geladen: boolean;
+  modell: string;
+}> {
+  return json(await fetch("/api/health", { cache: "no-store" }));
+}
+
 export async function fetchErgebnisse(): Promise<VerlaufEintrag[]> {
   return json(await fetch("/api/ergebnisse", { cache: "no-store" }));
 }

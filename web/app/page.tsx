@@ -5,7 +5,7 @@ import DokuTab from "@/components/DokuTab";
 import GenehmigtTab from "@/components/GenehmigtTab";
 import ScreeningTab from "@/components/ScreeningTab";
 import VerlaufTab from "@/components/VerlaufTab";
-import { fetchLabels, fetchStelle } from "@/lib/api";
+import { fetchHealth, fetchLabels, fetchStelle } from "@/lib/api";
 import type { Labels } from "@/lib/types";
 
 type Tab = "screening" | "genehmigt" | "verlauf" | "doku";
@@ -22,13 +22,15 @@ export default function Home() {
   const [labels, setLabels] = useState<Labels | null>(null);
   const [stelle, setStelle] = useState("");
   const [apiFehler, setApiFehler] = useState(false);
+  const [keyFehlt, setKeyFehlt] = useState(false);
 
   useEffect(() => {
-    Promise.all([fetchLabels(), fetchStelle()])
-      .then(([l, s]) => {
+    Promise.all([fetchLabels(), fetchStelle(), fetchHealth()])
+      .then(([l, s, health]) => {
         setLabels(l);
         // lokal bearbeitete Ausschreibung ueberlebt den Reload
         setStelle(localStorage.getItem("tl.stelle") ?? s);
+        setKeyFehlt(!health.api_key_geladen);
       })
       .catch(() => setApiFehler(true));
   }, []);
@@ -72,6 +74,17 @@ export default function Home() {
             <code className="text-xs">
               uvicorn api.main:app --reload --port 8000
             </code>
+          </div>
+        )}
+        {keyFehlt && !apiFehler && (
+          <div className="mb-8 rounded-lg bg-gold-soft px-4 py-3 text-sm text-gold">
+            <strong className="font-medium">GOOGLE_API_KEY fehlt.</strong> Das
+            Backend läuft, hat aber keinen Key — Analysen schlagen fehl. Lege
+            im Projekt-Root eine <code className="text-xs">.env</code> an
+            (Vorlage: <code className="text-xs">.env.example</code>) mit{" "}
+            <code className="text-xs">GOOGLE_API_KEY=…</code> und starte das
+            Backend neu. Die <code className="text-xs">.env</code> ist nicht im
+            Git, muss nach dem Klonen also neu erstellt werden.
           </div>
         )}
         {labels && (
