@@ -9,6 +9,8 @@ gespeicherten Dateien; ein erfolgreich analysierter Entwurf wandert in den
 Verlauf und wird als Entwurf geloescht.
 """
 
+import os
+import secrets
 import sys
 from pathlib import Path
 
@@ -36,15 +38,49 @@ from core.schemas import DOKUMENT_LABELS, GRUND_LABELS, KO_LABELS, KRITERIUM_LAB
 
 app = FastAPI(title="TalentLens API")
 
+# Beim Hosting die Frontend-Domain erlauben (nur noetig, falls das Frontend
+# das Backend direkt statt ueber den Next-Proxy aufruft).
+_frontend_origin = os.getenv("TALENTLENS_FRONTEND_ORIGIN", "").strip()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000"]
+    + ([_frontend_origin] if _frontend_origin else []),
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 _pipeline = None
 _aufteilungs_chain = None
+
+# Schutz gegen versehentliche/boeswillige Riesen-Uploads (relevant fuers Hosting)
+MAX_DATEIEN_PRO_UPLOAD = 20
+MAX_DATEI_BYTES = 15 * 1024 * 1024  # 15 MB pro PDF
+
+
+def _passwort() -> str:
+    """Optionales Zugriffs-Passwort (fuers Hosting). Leer = kein Schutz."""
+    return os.getenv("TALENTLENS_PASSWORT", "").strip()
+
+
+@app.middleware("http")
+async def passwort_schutz(request: Request, call_next):
+    """Ist TALENTLENS_PASSWORT gesetzt, brauchen alle Endpoints ausser
+    /api/health den passenden X-Passwort-Header. Lokal ohne gesetzte
+    Variable aendert sich nichts."""
+    erwartet = _passwort()
+    if (
+        erwartet
+        and request.url.path != "/api/health"
+        and request.method != "OPTIONS"
+    ):
+        geliefert = request.headers.get("x-passwort", "")
+        if not secrets.compare_digest(geliefert, erwartet):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Passwort fehlt oder ist falsch."},
+            )
+    return await call_next(request)
 
 
 def get_pipeline():
@@ -106,6 +142,7 @@ def health():
     return {
         "ok": api_key_vorhanden(),
         "api_key_geladen": api_key_vorhanden(),
+        "passwort_erforderlich": bool(_passwort()),
         "modell": MODELL_NAME,
     }
 
@@ -166,10 +203,22 @@ def entwurf_loeschen(entwurf_id: int):
 @app.post("/api/entwuerfe/{entwurf_id}/dateien")
 def dateien_hochladen(entwurf_id: int, dateien: list[UploadFile] = File(...)):
     _entwurf_oder_404(entwurf_id)
+    if len(dateien) > MAX_DATEIEN_PRO_UPLOAD:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Maximal {MAX_DATEIEN_PRO_UPLOAD} Dateien pro Upload.",
+        )
     for datei in dateien:
         if not (datei.filename or "").lower().endswith(".pdf"):
             continue
-        storage.speichere_entwurf_datei(entwurf_id, datei.filename, datei.file.read())
+        inhalt = datei.file.read()
+        if len(inhalt) > MAX_DATEI_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"{datei.filename}: Datei groesser als "
+                f"{MAX_DATEI_BYTES // (1024 * 1024)} MB.",
+            )
+        storage.speichere_entwurf_datei(entwurf_id, datei.filename, inhalt)
     return storage.lade_entwurf(entwurf_id)
 
 
@@ -188,14 +237,26 @@ def eingang(dateien: list[UploadFile] = File(...)):
     zuordnen. Ein Sammel-PDF (z.B. 2 Seiten CV + 1 Seite Anschreiben) wird
     in Einzeldokumente zerlegt; Dokumente mit gleichem erkannten Namen
     landen in derselben Bewerbung."""
+    if len(dateien) > MAX_DATEIEN_PRO_UPLOAD:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Maximal {MAX_DATEIEN_PRO_UPLOAD} Dateien pro Upload.",
+        )
     verarbeitet, fehler = [], []
     for datei in dateien:
         name = datei.filename or "datei.pdf"
         if not name.lower().endswith(".pdf"):
             fehler.append({"datei": name, "meldung": "Keine PDF-Datei."})
             continue
+        inhalt = datei.file.read()
+        if len(inhalt) > MAX_DATEI_BYTES:
+            fehler.append({
+                "datei": name,
+                "meldung": f"Datei groesser als {MAX_DATEI_BYTES // (1024 * 1024)} MB.",
+            })
+            continue
         try:
-            sortiert = sortiere_pdf(name, datei.file.read(), get_aufteilungs_chain())
+            sortiert = sortiere_pdf(name, inhalt, get_aufteilungs_chain())
         except Exception as e:
             if _ist_quota_fehler(e):
                 raise _quota_exception()

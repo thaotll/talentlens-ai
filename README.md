@@ -132,6 +132,39 @@ Dann http://localhost:3000 oeffnen:
 python scripts/screen_cli.py data/test_cvs/* --ko-motivationsschreiben
 ```
 
+## Deployment (Railway)
+
+Ein Railway-Projekt, **zwei Services aus demselben GitHub-Repo**. Die
+Start-Commands kommen automatisch aus `railway.json` bzw. `web/railway.json`.
+
+**Service 1 — Backend** (Root Directory: `/`):
+
+| Variable | Wert | Zweck |
+|---|---|---|
+| `GOOGLE_API_KEY` | Key aus AI Studio | Gemini-Zugriff |
+| `TALENTLENS_PASSWORT` | gemeinsames Team-Passwort | Zugriffsschutz — dringend empfohlen, sobald die App oeffentlich erreichbar ist |
+| `PORT` | `8000` | fester Port fuers Private Networking |
+| `TALENTLENS_DATEN` | `/data` | SQLite + Uploads aufs Volume |
+
+Zusaetzlich ein **Volume** anlegen und unter `/data` mounten — sonst sind
+Verlauf und Entwuerfe nach jedem Deploy weg. Der Service braucht **keine
+Public Domain**: Das Frontend erreicht ihn ueber Railways Private
+Networking (deshalb bindet der Start-Command an `--host ::`, IPv6).
+
+**Service 2 — Frontend** (Root Directory: `web`):
+
+| Variable | Wert |
+|---|---|
+| `BACKEND_URL` | `http://<backend-service-name>.railway.internal:8000` |
+
+Hier eine **Public Domain generieren** — das ist die URL fuers Team. Ist
+`TALENTLENS_PASSWORT` gesetzt, zeigt das Frontend automatisch eine
+Passwort-Maske.
+
+> Auch gehostet gilt: **nur fiktive Testdaten** hochladen (siehe
+> [Limitationen](#limitationen)), und im Free Tier teilen sich alle
+> Nutzer das Tageskontingent des Gemini-Keys.
+
 ## Test-Daten
 
 `data/stellenausschreibung.md` (Junior Data Analyst) plus 5 fiktive
