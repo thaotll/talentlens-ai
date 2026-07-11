@@ -61,6 +61,12 @@ export interface Labels {
   dokumente: Record<string, string>;
 }
 
+/** /api/labels liefert beide Sprachen; das UI waehlt nach der Sprachwahl. */
+export interface AlleLabels {
+  de: Labels;
+  en: Labels;
+}
+
 // --- Live-Analyse (gestreamte Pipeline-Schritte) -----------------------------
 
 /** Schritt-Namen wie in core/pipeline.py (PIPELINE_SCHRITTE). */

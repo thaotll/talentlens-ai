@@ -2,9 +2,31 @@
 
 import { useEffect, useState } from "react";
 import { fetchErgebnisse } from "@/lib/api";
+import { useSprache } from "@/lib/i18n";
 import type { Labels, VerlaufEintrag } from "@/lib/types";
 import BewertungDetails from "./BewertungDetails";
 import { EmpfehlungChip, formatScore } from "./ui";
+
+const T = {
+  de: {
+    laden: "Lade…",
+    leerTitel: "Noch niemand im Rennen.",
+    leerText:
+      "Genehmigte Bewerbungen erscheinen hier sortiert nach Score, die beste zuerst.",
+    imRennen: (n: number) =>
+      `${n} ${n === 1 ? "Kandidat:in" : "Kandidat:innen"} im Rennen, sortiert nach Gesamt-Score`,
+    dokumente: (n: number) => (n === 1 ? "1 Dokument" : `${n} Dokumente`),
+  },
+  en: {
+    laden: "Loading…",
+    leerTitel: "Nobody in the running yet.",
+    leerText:
+      "Approved applications appear here sorted by score, best first.",
+    imRennen: (n: number) =>
+      `${n} ${n === 1 ? "candidate" : "candidates"} in the running, sorted by total score`,
+    dokumente: (n: number) => (n === 1 ? "1 document" : `${n} documents`),
+  },
+} as const;
 
 export default function GenehmigtTab({
   labels,
@@ -13,6 +35,8 @@ export default function GenehmigtTab({
   labels: Labels;
   aktiv: boolean;
 }) {
+  const { sprache } = useSprache();
+  const t = T[sprache];
   const [eintraege, setEintraege] = useState<VerlaufEintrag[] | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
   const [offen, setOffen] = useState<number | null>(null);
@@ -27,7 +51,7 @@ export default function GenehmigtTab({
   }, [aktiv]);
 
   if (fehler) return <p className="text-sm text-rot">{fehler}</p>;
-  if (!eintraege) return <p className="text-sm text-ink-faint">Lade…</p>;
+  if (!eintraege) return <p className="text-sm text-ink-faint">{t.laden}</p>;
 
   const genehmigte = eintraege
     .filter((e) => e.status === "genehmigt" && e.gesamt_score !== null)
@@ -37,12 +61,9 @@ export default function GenehmigtTab({
     return (
       <div className="py-16 text-center">
         <p className="font-serif text-2xl italic text-ink-faint">
-          Noch niemand im Rennen.
+          {t.leerTitel}
         </p>
-        <p className="mt-2 text-sm text-ink-faint">
-          Genehmigte Bewerbungen erscheinen hier sortiert nach Score, die
-          beste zuerst.
-        </p>
+        <p className="mt-2 text-sm text-ink-faint">{t.leerText}</p>
       </div>
     );
   }
@@ -50,9 +71,7 @@ export default function GenehmigtTab({
   return (
     <section>
       <p className="mb-2 text-sm text-ink-faint">
-        {genehmigte.length}{" "}
-        {genehmigte.length === 1 ? "Kandidat:in" : "Kandidat:innen"} im Rennen,
-        sortiert nach Gesamt-Score
+        {t.imRennen(genehmigte.length)}
       </p>
       <ol>
         {genehmigte.map((e, i) => (
@@ -68,15 +87,12 @@ export default function GenehmigtTab({
               <span>
                 <span className="block font-medium">{e.kandidat}</span>
                 <span className="block text-xs text-ink-faint">
-                  {e.stelle_titel} ·{" "}
-                  {e.dokumente.length === 1
-                    ? "1 Dokument"
-                    : `${e.dokumente.length} Dokumente`}
+                  {e.stelle_titel} · {t.dokumente(e.dokumente.length)}
                 </span>
               </span>
               {e.empfehlung && <EmpfehlungChip empfehlung={e.empfehlung} />}
               <span className="font-serif text-4xl">
-                {formatScore(e.gesamt_score!)}
+                {formatScore(e.gesamt_score!, sprache)}
                 <span className="ml-1 text-sm text-ink-faint">/100</span>
               </span>
             </button>

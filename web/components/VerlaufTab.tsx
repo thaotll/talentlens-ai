@@ -2,13 +2,35 @@
 
 import { useEffect, useState } from "react";
 import { fetchErgebnisse, loescheVerlauf } from "@/lib/api";
+import { LOCALES, useSprache, type Sprache } from "@/lib/i18n";
 import type { Labels, VerlaufEintrag } from "@/lib/types";
 import BewertungDetails from "./BewertungDetails";
 import { formatScore, StatusChip } from "./ui";
 
-function formatZeit(iso: string): string {
+const T = {
+  de: {
+    laden: "Lade…",
+    leerTitel: "Der Verlauf ist leer.",
+    leerText: "Hier erscheinen alle Bewertungen, auch abgelehnte mit Begründung.",
+    anzahl: (n: number) =>
+      `${n} ${n === 1 ? "Bewertung" : "Bewertungen"}, neueste zuerst`,
+    leeren: "Verlauf leeren",
+    leerenBestaetigen: "Gesamten Verlauf unwiderruflich löschen?",
+  },
+  en: {
+    laden: "Loading…",
+    leerTitel: "The history is empty.",
+    leerText: "All evaluations appear here, including rejections with reasons.",
+    anzahl: (n: number) =>
+      `${n} ${n === 1 ? "evaluation" : "evaluations"}, newest first`,
+    leeren: "Clear history",
+    leerenBestaetigen: "Permanently delete the entire history?",
+  },
+} as const;
+
+function formatZeit(iso: string, sprache: Sprache): string {
   const d = new Date(iso);
-  return d.toLocaleString("de-DE", {
+  return d.toLocaleString(LOCALES[sprache], {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
@@ -23,6 +45,8 @@ export default function VerlaufTab({
   labels: Labels;
   aktiv: boolean;
 }) {
+  const { sprache } = useSprache();
+  const t = T[sprache];
   const [eintraege, setEintraege] = useState<VerlaufEintrag[] | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
   const [offen, setOffen] = useState<number | null>(null);
@@ -37,17 +61,15 @@ export default function VerlaufTab({
   }, [aktiv]);
 
   if (fehler) return <p className="text-sm text-rot">{fehler}</p>;
-  if (!eintraege) return <p className="text-sm text-ink-faint">Lade…</p>;
+  if (!eintraege) return <p className="text-sm text-ink-faint">{t.laden}</p>;
 
   if (eintraege.length === 0) {
     return (
       <div className="py-16 text-center">
         <p className="font-serif text-2xl italic text-ink-faint">
-          Der Verlauf ist leer.
+          {t.leerTitel}
         </p>
-        <p className="mt-2 text-sm text-ink-faint">
-          Hier erscheinen alle Bewertungen, auch abgelehnte mit Begründung.
-        </p>
+        <p className="mt-2 text-sm text-ink-faint">{t.leerText}</p>
       </div>
     );
   }
@@ -64,20 +86,16 @@ export default function VerlaufTab({
   return (
     <section>
       <div className="mb-2 flex items-baseline justify-between">
-        <p className="text-sm text-ink-faint">
-          {eintraege.length}{" "}
-          {eintraege.length === 1 ? "Bewertung" : "Bewertungen"}, neueste zuerst
-        </p>
+        <p className="text-sm text-ink-faint">{t.anzahl(eintraege.length)}</p>
         <button
           onClick={async () => {
-            if (!window.confirm("Gesamten Verlauf unwiderruflich löschen?"))
-              return;
+            if (!window.confirm(t.leerenBestaetigen)) return;
             await loescheVerlauf();
             setEintraege([]);
           }}
           className="text-xs text-ink-faint transition-colors hover:text-rot"
         >
-          Verlauf leeren
+          {t.leeren}
         </button>
       </div>
 
@@ -94,7 +112,7 @@ export default function VerlaufTab({
               aria-expanded={offen === e.id}
             >
               <span className="text-xs text-ink-faint">
-                {formatZeit(e.zeitstempel)}
+                {formatZeit(e.zeitstempel, sprache)}
               </span>
               <span className="min-w-0">
                 <span className="font-medium">{e.kandidat}</span>
@@ -115,7 +133,7 @@ export default function VerlaufTab({
               <span className="text-right font-serif text-xl">
                 {e.gesamt_score !== null ? (
                   <>
-                    {formatScore(e.gesamt_score)}
+                    {formatScore(e.gesamt_score, sprache)}
                     <span className="text-xs text-ink-faint">/100</span>
                   </>
                 ) : (

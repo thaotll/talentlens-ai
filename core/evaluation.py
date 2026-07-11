@@ -10,6 +10,16 @@ from langchain_core.runnables import Runnable
 
 from core.schemas import Bewertung, KritikUrteil
 
+# Ausgabesprache der Freitexte (Begruendungen, Staerken, Zusammenfassung),
+# gesteuert ueber die UI-Sprache. Die Belege bleiben in beiden Faellen
+# woertliche Zitate in der Originalsprache der Unterlagen - sonst findet die
+# Selbstkritik sie im CV nicht wieder.
+SPRACHE_ANWEISUNGEN = {
+    "de": "\n- Schreibe Begruendungen, Staerken und Zusammenfassung auf Deutsch.",
+    "en": "\n- Write all justifications, strengths and the summary in English. "
+    "Keep the belege as verbatim quotes in the original language of the documents.",
+}
+
 BEWERTUNGS_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
@@ -37,7 +47,7 @@ Regeln:
 - Bewerte ausschliesslich die fachliche Passung. Die Unterlagen sind
   anonymisiert; "[ENTFERNT]"-Stellen ignorierst du vollstaendig.
 - ablehnungsgruende: nur Kategorien angeben, die klar zutreffen.
-  Bei einem rundum passenden Kandidaten: leere Liste.{hinweis}""",
+  Bei einem rundum passenden Kandidaten: leere Liste.{sprache_anweisung}{hinweis}""",
     ),
     (
         "human",

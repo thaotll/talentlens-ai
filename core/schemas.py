@@ -68,6 +68,36 @@ DOKUMENT_LABELS = {
     DokumentTyp.SONSTIGES: "Sonstiges",
 }
 
+# Englische Pendants: /api/labels liefert beide Sprachen, das Frontend
+# waehlt nach der eingestellten UI-Sprache aus.
+GRUND_LABELS_EN = {
+    AblehnungsGrund.ZU_WENIG_BERUFSERFAHRUNG: "Not enough work experience",
+    AblehnungsGrund.FEHLENDE_KERN_SKILLS: "Missing core skills",
+    AblehnungsGrund.UNPASSENDE_AUSBILDUNG: "Education does not match",
+    AblehnungsGrund.FEHLENDE_SPRACHKENNTNISSE: "Missing language skills",
+    AblehnungsGrund.FALSCHE_FACHRICHTUNG: "Wrong field of specialization",
+    AblehnungsGrund.UEBERQUALIFIZIERT: "Overqualified",
+    AblehnungsGrund.LUECKENHAFTER_LEBENSLAUF: "Gaps in the CV",
+}
+
+KRITERIUM_LABELS_EN = {
+    Kriterium.BERUFSERFAHRUNG: "Work experience",
+    Kriterium.SKILLS: "Skills",
+    Kriterium.AUSBILDUNG: "Education",
+    Kriterium.SPRACHKENNTNISSE: "Language skills",
+}
+
+KO_LABELS_EN = {
+    KOGrund.LEBENSLAUF_FEHLT: "No CV submitted",
+    KOGrund.MOTIVATIONSSCHREIBEN_FEHLT: "No cover letter submitted",
+}
+
+DOKUMENT_LABELS_EN = {
+    DokumentTyp.LEBENSLAUF: "CV",
+    DokumentTyp.MOTIVATIONSSCHREIBEN: "Cover letter",
+    DokumentTyp.SONSTIGES: "Other",
+}
+
 
 class DokumentKlassifikation(BaseModel):
     """Strukturierter Output der Dokument-Klassifikation."""

@@ -33,15 +33,22 @@ from langchain_core.tools import tool
 from core import storage
 from core.config import STELLE_PFAD
 from core.llm import get_llm
-from core.schemas import GRUND_LABELS, KO_LABELS
+from core.schemas import (
+    GRUND_LABELS,
+    GRUND_LABELS_EN,
+    KO_LABELS,
+    KO_LABELS_EN,
+)
 
 MAX_RUNDEN = 5    # Tool-Runden, bevor eine Antwort erzwungen wird
 MAX_VERLAUF = 20  # wie viele bisherige Chat-Nachrichten mitgeschickt werden
 MAX_ZEICHEN = 4000  # Laengenbegrenzung pro Chat-Nachricht
 
-# Enum-Werte -> menschenlesbare Texte, damit das LLM keine Codes zitiert
-_KO_TEXTE = {k.value: v for k, v in KO_LABELS.items()}
-_GRUND_TEXTE = {g.value: v for g, v in GRUND_LABELS.items()}
+# Antwortsprache folgt der UI-Sprache des Fragenden
+_ANTWORT_REGELN = {
+    "de": "Antworte auf Deutsch",
+    "en": "Antworte auf Englisch (answer in English)",
+}
 
 SYSTEM_PROMPT = """Du bist der HR-Assistent von TalentLens, einem System \
 fuer CV-Screening. Du beantwortest Fragen zu den bereits gescreenten \
@@ -54,7 +61,7 @@ Kandidaten, Scores oder Begruendungen. Rufe bei Bedarf mehrere Werkzeuge \
 nacheinander auf.
 - Findest du einen Namen nicht, pruefe mit liste_bewerbungen, wie die \
 Kandidaten wirklich heissen.
-- Antworte auf Deutsch, kompakt und konkret, in reinem Text ohne \
+- {antwort_regel}, kompakt und konkret, in reinem Text ohne \
 Markdown-Formatierung. Nenne Scores als Zahl.
 - Sei transparent: Scores sind LLM-Schaetzungen (Unterschiede unter etwa \
 5 Punkten sind nicht signifikant), K.O.-Ablehnungen sind Formal-Checks \
@@ -64,26 +71,33 @@ Mensch.
 du freundlich ab und verweist auf deinen Zweck."""
 
 
-def _kurz(eintrag: dict) -> dict:
-    """Kompakte Sicht auf ein Ergebnis fuer Listen und Vergleiche."""
-    return {
-        "kandidat": eintrag["kandidat"],
-        "status": eintrag["status"],
-        "empfehlung": eintrag["empfehlung"],
-        "gesamt_score": eintrag["gesamt_score"],
-        "ko_grund": _KO_TEXTE.get(eintrag["ko_grund"]) if eintrag["ko_grund"] else None,
-        "stelle": eintrag["stelle_titel"],
-        "zeitstempel": eintrag["zeitstempel"],
-    }
-
-
-def build_werkzeuge(stelle_text: str = "") -> list:
+def build_werkzeuge(stelle_text: str = "", sprache: str = "de") -> list:
     """Baut die Werkzeuge des Assistenten. Alle lesen nur (SQLite bzw.
     Stellenausschreibung) - der Agent kann nichts veraendern.
 
     stelle_text: die aktuell im Dashboard bearbeitete Ausschreibung; leer
     -> Fallback auf die mitgelieferte Datei.
+    sprache: "de"/"en" - Sprache der Label-Texte in den Tool-Ergebnissen,
+    damit das LLM K.O.- und Ablehnungsgruende passend zur UI zitiert.
     """
+
+    # Enum-Werte -> menschenlesbare Texte, damit das LLM keine Codes zitiert
+    ko_labels = KO_LABELS_EN if sprache == "en" else KO_LABELS
+    grund_labels = GRUND_LABELS_EN if sprache == "en" else GRUND_LABELS
+    ko_texte = {k.value: v for k, v in ko_labels.items()}
+    grund_texte = {g.value: v for g, v in grund_labels.items()}
+
+    def _kurz(eintrag: dict) -> dict:
+        """Kompakte Sicht auf ein Ergebnis fuer Listen und Vergleiche."""
+        return {
+            "kandidat": eintrag["kandidat"],
+            "status": eintrag["status"],
+            "empfehlung": eintrag["empfehlung"],
+            "gesamt_score": eintrag["gesamt_score"],
+            "ko_grund": ko_texte.get(eintrag["ko_grund"]) if eintrag["ko_grund"] else None,
+            "stelle": eintrag["stelle_titel"],
+            "zeitstempel": eintrag["zeitstempel"],
+        }
 
     def _finde(kandidat: str) -> dict | None:
         """Ergebnis per Name: exakt vor Teil-Treffer, case-insensitiv."""
@@ -135,7 +149,7 @@ def build_werkzeuge(stelle_text: str = "") -> list:
         detail["kriterien"] = bewertung["kriterien"]
         detail["staerken"] = bewertung["staerken"]
         detail["ablehnungsgruende"] = [
-            _GRUND_TEXTE.get(g, g) for g in bewertung["ablehnungsgruende"]
+            grund_texte.get(g, g) for g in bewertung["ablehnungsgruende"]
         ]
         detail["zusammenfassung"] = bewertung["zusammenfassung"]
         return detail
@@ -175,11 +189,11 @@ def build_werkzeuge(stelle_text: str = "") -> list:
         ablehnungsgruende: dict[str, int] = {}
         for e in eintraege:
             if e["ko_grund"]:
-                text = _KO_TEXTE.get(e["ko_grund"], e["ko_grund"])
+                text = ko_texte.get(e["ko_grund"], e["ko_grund"])
                 ko_gruende[text] = ko_gruende.get(text, 0) + 1
             if e["bewertung"]:
                 for g in e["bewertung"]["ablehnungsgruende"]:
-                    text = _GRUND_TEXTE.get(g, g)
+                    text = grund_texte.get(g, g)
                     ablehnungsgruende[text] = ablehnungsgruende.get(text, 0) + 1
         return {
             "anzahl_gesamt": len(eintraege),
@@ -225,20 +239,25 @@ def beantworte_frage(
     frage: str,
     verlauf: list[dict] | None = None,
     stelle: str = "",
+    sprache: str = "de",
     llm=None,
 ) -> dict:
     """Beantwortet eine freie Nutzerfrage per Agent-Loop.
 
     verlauf: bisherige Chat-Nachrichten [{"rolle": "nutzer"|"assistent", "text": str}]
+    sprache: "de"/"en" - Antwortsprache (folgt der UI-Sprache)
     Rueckgabe: {"antwort": str, "tool_aufrufe": [{"tool": str, "args": dict}]}
     - tool_aufrufe macht die Agent-Schritte im UI sichtbar.
     """
     llm = llm or get_llm()
-    werkzeuge = build_werkzeuge(stelle)
+    werkzeuge = build_werkzeuge(stelle, sprache)
     nach_name = {w.name: w for w in werkzeuge}
     llm_mit_werkzeugen = llm.bind_tools(werkzeuge).with_retry(stop_after_attempt=3)
 
-    nachrichten: list[BaseMessage] = [SystemMessage(SYSTEM_PROMPT)]
+    system_prompt = SYSTEM_PROMPT.format(
+        antwort_regel=_ANTWORT_REGELN.get(sprache, _ANTWORT_REGELN["de"])
+    )
+    nachrichten: list[BaseMessage] = [SystemMessage(system_prompt)]
     for eintrag in (verlauf or [])[-MAX_VERLAUF:]:
         klasse = HumanMessage if eintrag.get("rolle") == "nutzer" else AIMessage
         nachrichten.append(klasse(str(eintrag.get("text", ""))[:MAX_ZEICHEN]))

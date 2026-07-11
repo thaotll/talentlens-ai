@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, frageAssistent } from "@/lib/api";
+import { useSprache } from "@/lib/i18n";
 import type { ChatNachricht } from "@/lib/types";
 import { Spinner } from "./ui";
 
@@ -10,14 +11,56 @@ import { Spinner } from "./ui";
  *  selbst, welche Werkzeuge es aufruft - die Aufrufe werden pro Antwort
  *  eingeblendet, damit die Agent-Schritte nachvollziehbar sind. */
 
-const BEISPIEL_FRAGEN = [
-  "Wer sind die besten Kandidaten und warum?",
-  "Warum ist Ben Keller rausgeflogen?",
-  "Vergleiche Anna Schmidt und David Okafor bei den Skills.",
-  "Woran scheitern die meisten Bewerbungen?",
-];
+const T = {
+  de: {
+    beispielFragen: [
+      "Wer sind die besten Kandidaten und warum?",
+      "Warum ist Ben Keller rausgeflogen?",
+      "Vergleiche Anna Schmidt und David Okafor bei den Skills.",
+      "Woran scheitern die meisten Bewerbungen?",
+    ],
+    introVor: "Freie Fragen zu den Screening-Ergebnissen. Hier arbeitet ein ",
+    introAgent: "Agent",
+    introNach:
+      ": Das LLM entscheidet selbst, welche Werkzeuge (Ergebnisliste, Bewertungen, Vergleich, Statistik, Ausschreibung) es aufruft - die Schritte werden unter jeder Antwort angezeigt.",
+    chatLeeren: "Chat leeren",
+    zumAusprobieren: "Zum Ausprobieren",
+    agentArbeitet:
+      "Der Agent arbeitet - ruft Werkzeuge auf und formuliert die Antwort …",
+    apiWeg: "API nicht erreichbar - läuft das Backend?",
+    platzhalter: "Frage zu den Ergebnissen stellen …",
+    eingabeAria: "Frage an den Assistenten",
+    fragen: "Fragen",
+    hinweis:
+      "Antworten stützen sich auf die gespeicherten Bewertungen - Scores bleiben LLM-Schätzungen, die Entscheidung trifft ein Mensch.",
+  },
+  en: {
+    beispielFragen: [
+      "Who are the best candidates and why?",
+      "Why was Ben Keller rejected?",
+      "Compare Anna Schmidt and David Okafor on skills.",
+      "What do most applications fail on?",
+    ],
+    introVor: "Ask free-form questions about the screening results. This is an ",
+    introAgent: "agent",
+    introNach:
+      ": the LLM decides on its own which tools (result list, evaluations, comparison, statistics, job posting) to call - the steps are shown below each answer.",
+    chatLeeren: "Clear chat",
+    zumAusprobieren: "Try it out",
+    agentArbeitet:
+      "The agent is working - calling tools and writing the answer …",
+    apiWeg: "API not reachable - is the backend running?",
+    platzhalter: "Ask a question about the results …",
+    eingabeAria: "Question for the assistant",
+    fragen: "Ask",
+    hinweis:
+      "Answers are based on the stored evaluations - scores remain LLM estimates, the decision is made by a human.",
+  },
+} as const;
 
 export default function AssistentTab({ stelle }: { stelle: string }) {
+  const { sprache } = useSprache();
+  const t = T[sprache];
   const [nachrichten, setNachrichten] = useState<ChatNachricht[]>([]);
   const [eingabe, setEingabe] = useState("");
   const [laeuft, setLaeuft] = useState(false);
@@ -39,7 +82,7 @@ export default function AssistentTab({ stelle }: { stelle: string }) {
     setNachrichten((n) => [...n, { rolle: "nutzer", text }]);
     setLaeuft(true);
     try {
-      const antwort = await frageAssistent(text, verlauf, stelle);
+      const antwort = await frageAssistent(text, verlauf, stelle, sprache);
       setNachrichten((n) => [
         ...n,
         {
@@ -49,9 +92,7 @@ export default function AssistentTab({ stelle }: { stelle: string }) {
         },
       ]);
     } catch (e) {
-      setFehler(
-        e instanceof ApiError ? e.message : "API nicht erreichbar - läuft das Backend?",
-      );
+      setFehler(e instanceof ApiError ? e.message : t.apiWeg);
     }
     setLaeuft(false);
   }
@@ -65,11 +106,9 @@ export default function AssistentTab({ stelle }: { stelle: string }) {
     <div className="mx-auto flex max-w-2xl flex-col">
       <div className="flex items-baseline justify-between gap-4">
         <p className="text-sm leading-relaxed text-ink-soft">
-          Freie Fragen zu den Screening-Ergebnissen. Hier arbeitet ein{" "}
-          <strong className="font-medium text-ink">Agent</strong>: Das LLM
-          entscheidet selbst, welche Werkzeuge (Ergebnisliste, Bewertungen,
-          Vergleich, Statistik, Ausschreibung) es aufruft - die Schritte
-          werden unter jeder Antwort angezeigt.
+          {t.introVor}
+          <strong className="font-medium text-ink">{t.introAgent}</strong>
+          {t.introNach}
         </p>
         {nachrichten.length > 0 && (
           <button
@@ -79,7 +118,7 @@ export default function AssistentTab({ stelle }: { stelle: string }) {
             }}
             className="shrink-0 text-xs text-ink-faint transition-colors hover:text-ink"
           >
-            Chat leeren
+            {t.chatLeeren}
           </button>
         )}
       </div>
@@ -88,10 +127,10 @@ export default function AssistentTab({ stelle }: { stelle: string }) {
         {nachrichten.length === 0 && !laeuft && (
           <div className="rounded-xl border border-line bg-surface p-5">
             <p className="text-xs tracking-wide text-ink-faint uppercase">
-              Zum Ausprobieren
+              {t.zumAusprobieren}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              {BEISPIEL_FRAGEN.map((frage) => (
+              {t.beispielFragen.map((frage) => (
                 <button
                   key={frage}
                   onClick={() => fragen(frage)}
@@ -135,8 +174,7 @@ export default function AssistentTab({ stelle }: { stelle: string }) {
 
         {laeuft && (
           <p className="flex items-center gap-2.5 text-sm text-ink-faint">
-            <Spinner /> Der Agent arbeitet - ruft Werkzeuge auf und formuliert
-            die Antwort …
+            <Spinner /> {t.agentArbeitet}
           </p>
         )}
         {fehler && (
@@ -152,8 +190,8 @@ export default function AssistentTab({ stelle }: { stelle: string }) {
           <input
             value={eingabe}
             onChange={(e) => setEingabe(e.target.value)}
-            placeholder="Frage zu den Ergebnissen stellen …"
-            aria-label="Frage an den Assistenten"
+            placeholder={t.platzhalter}
+            aria-label={t.eingabeAria}
             className="w-full rounded-lg border border-line bg-surface px-4 py-2.5 text-sm outline-none focus:border-tanne"
           />
           <button
@@ -161,13 +199,10 @@ export default function AssistentTab({ stelle }: { stelle: string }) {
             disabled={laeuft || !eingabe.trim()}
             className="shrink-0 rounded-lg bg-tanne px-5 py-2.5 text-sm font-medium text-surface transition-colors hover:bg-tanne-deep disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Fragen
+            {t.fragen}
           </button>
         </div>
-        <p className="mt-2 text-xs text-ink-faint">
-          Antworten stützen sich auf die gespeicherten Bewertungen - Scores
-          bleiben LLM-Schätzungen, die Entscheidung trifft ein Mensch.
-        </p>
+        <p className="mt-2 text-xs text-ink-faint">{t.hinweis}</p>
       </form>
     </div>
   );

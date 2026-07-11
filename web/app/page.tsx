@@ -14,7 +14,8 @@ import {
   fetchStelle,
   speicherePasswort,
 } from "@/lib/api";
-import type { Labels } from "@/lib/types";
+import { useSprache } from "@/lib/i18n";
+import type { AlleLabels } from "@/lib/types";
 
 type Tab =
   | "screening"
@@ -24,9 +25,48 @@ type Tab =
   | "assistent"
   | "doku";
 
+const T = {
+  de: {
+    untertitel: "CV-Screening mit LangChain",
+    nav: {
+      screening: "Screening",
+      anforderungen: "Anforderungen",
+      genehmigt: "Genehmigt",
+      verlauf: "Verlauf",
+      assistent: "Assistent",
+      doku: "So funktioniert's",
+    },
+    navAria: "Bereiche",
+    fussnote:
+      "Uni-Projekt · LangChain + Gemini. Nur fiktive Testdaten - keine echten Bewerberdaten hochladen.",
+    apiFehler: "API nicht erreichbar. Läuft das Backend?",
+    keyFehltTitel: "GOOGLE_API_KEY fehlt.",
+    laden: "Lade…",
+  },
+  en: {
+    untertitel: "CV screening with LangChain",
+    nav: {
+      screening: "Screening",
+      anforderungen: "Requirements",
+      genehmigt: "Approved",
+      verlauf: "History",
+      assistent: "Assistant",
+      doku: "How it works",
+    },
+    navAria: "Sections",
+    fussnote:
+      "University project · LangChain + Gemini. Fictional test data only - do not upload real applicant data.",
+    apiFehler: "API not reachable. Is the backend running?",
+    keyFehltTitel: "GOOGLE_API_KEY is missing.",
+    laden: "Loading…",
+  },
+} as const;
+
 export default function Home() {
+  const { sprache } = useSprache();
+  const t = T[sprache];
   const [tab, setTab] = useState<Tab>("screening");
-  const [labels, setLabels] = useState<Labels | null>(null);
+  const [labels, setLabels] = useState<AlleLabels | null>(null);
   const [stelle, setStelle] = useState("");
   const [lebenslaufPflicht, setLebenslaufPflicht] = useState(true);
   const [motivationPflicht, setMotivationPflicht] = useState(false);
@@ -81,37 +121,37 @@ export default function Home() {
             T
           </span>
           <p className="mt-0.5 text-xs text-ink-faint max-md:hidden">
-            CV-Screening mit LangChain
+            {t.untertitel}
           </p>
         </div>
 
-        <nav className="mt-8 flex flex-col gap-1" aria-label="Bereiche">
+        <nav className="mt-8 flex flex-col gap-1" aria-label={t.navAria}>
           <NavEintrag
-            label="Screening"
+            label={t.nav.screening}
             aktiv={tab === "screening"}
             onClick={() => setTab("screening")}
             icon={<ScreeningIcon />}
           />
           <NavEintrag
-            label="Anforderungen"
+            label={t.nav.anforderungen}
             aktiv={tab === "anforderungen"}
             onClick={() => setTab("anforderungen")}
             icon={<AnforderungenIcon />}
           />
           <NavEintrag
-            label="Genehmigt"
+            label={t.nav.genehmigt}
             aktiv={tab === "genehmigt"}
             onClick={() => setTab("genehmigt")}
             icon={<GenehmigtIcon />}
           />
           <NavEintrag
-            label="Verlauf"
+            label={t.nav.verlauf}
             aktiv={tab === "verlauf"}
             onClick={() => setTab("verlauf")}
             icon={<VerlaufIcon />}
           />
           <NavEintrag
-            label="Assistent"
+            label={t.nav.assistent}
             aktiv={tab === "assistent"}
             onClick={() => setTab("assistent")}
             icon={<AssistentIcon />}
@@ -120,14 +160,14 @@ export default function Home() {
 
         <div className="mt-auto border-t border-line pt-3">
           <NavEintrag
-            label="So funktioniert's"
+            label={t.nav.doku}
             aktiv={tab === "doku"}
             onClick={() => setTab("doku")}
             icon={<HilfeIcon />}
           />
+          <SprachSchalter />
           <p className="mt-3 px-3 text-[11px] leading-relaxed text-ink-faint max-md:hidden">
-            Uni-Projekt · LangChain + Gemini. Nur fiktive Testdaten - keine
-            echten Bewerberdaten hochladen.
+            {t.fussnote}
           </p>
         </div>
       </aside>
@@ -137,7 +177,7 @@ export default function Home() {
         <div className="mx-auto w-full max-w-4xl px-8 py-10 max-md:px-5">
           {apiFehler && (
             <div className="mb-8 rounded-lg bg-rot-soft px-4 py-3 text-sm text-rot">
-              API nicht erreichbar. Läuft das Backend?{" "}
+              {t.apiFehler}{" "}
               <code className="text-xs">
                 uvicorn api.main:app --reload --port 8000
               </code>
@@ -145,13 +185,28 @@ export default function Home() {
           )}
           {keyFehlt && !apiFehler && (
             <div className="mb-8 rounded-lg bg-gold-soft px-4 py-3 text-sm text-gold">
-              <strong className="font-medium">GOOGLE_API_KEY fehlt.</strong>{" "}
-              Das Backend läuft, hat aber keinen Key - Analysen schlagen fehl.
-              Lege im Projekt-Root eine <code className="text-xs">.env</code>{" "}
-              an (Vorlage: <code className="text-xs">.env.example</code>) mit{" "}
-              <code className="text-xs">GOOGLE_API_KEY=…</code> und starte das
-              Backend neu. Die <code className="text-xs">.env</code> ist nicht
-              im Git, muss nach dem Klonen also neu erstellt werden.
+              <strong className="font-medium">{t.keyFehltTitel}</strong>{" "}
+              {sprache === "de" ? (
+                <>
+                  Das Backend läuft, hat aber keinen Key - Analysen schlagen
+                  fehl. Lege im Projekt-Root eine{" "}
+                  <code className="text-xs">.env</code> an (Vorlage:{" "}
+                  <code className="text-xs">.env.example</code>) mit{" "}
+                  <code className="text-xs">GOOGLE_API_KEY=…</code> und starte
+                  das Backend neu. Die <code className="text-xs">.env</code>{" "}
+                  ist nicht im Git, muss nach dem Klonen also neu erstellt
+                  werden.
+                </>
+              ) : (
+                <>
+                  The backend is running but has no key - analyses will fail.
+                  Create a <code className="text-xs">.env</code> in the project
+                  root (template: <code className="text-xs">.env.example</code>)
+                  with <code className="text-xs">GOOGLE_API_KEY=…</code> and
+                  restart the backend. The <code className="text-xs">.env</code>{" "}
+                  is not in Git, so it has to be recreated after cloning.
+                </>
+              )}
             </div>
           )}
           {passwortNoetig && <PasswortGate onFreigabe={laden} />}
@@ -164,7 +219,7 @@ export default function Home() {
               <div className={tab === "screening" ? "" : "hidden"}>
                 <ScreeningTab
                   stelle={stelle}
-                  labels={labels}
+                  labels={labels[sprache]}
                   lebenslaufPflicht={lebenslaufPflicht}
                   motivationPflicht={motivationPflicht}
                   zuAnforderungen={() => setTab("anforderungen")}
@@ -181,24 +236,55 @@ export default function Home() {
                 />
               </div>
               <div className={tab === "genehmigt" ? "" : "hidden"}>
-                <GenehmigtTab labels={labels} aktiv={tab === "genehmigt"} />
+                <GenehmigtTab
+                  labels={labels[sprache]}
+                  aktiv={tab === "genehmigt"}
+                />
               </div>
               <div className={tab === "verlauf" ? "" : "hidden"}>
-                <VerlaufTab labels={labels} aktiv={tab === "verlauf"} />
+                <VerlaufTab labels={labels[sprache]} aktiv={tab === "verlauf"} />
               </div>
               <div className={tab === "assistent" ? "" : "hidden"}>
                 <AssistentTab stelle={stelle} />
               </div>
               <div className={tab === "doku" ? "" : "hidden"}>
-                <DokuTab labels={labels} />
+                <DokuTab labels={labels[sprache]} />
               </div>
             </>
           )}
           {!labels && !apiFehler && !passwortNoetig && (
-            <p className="text-sm text-ink-faint">Lade…</p>
+            <p className="text-sm text-ink-faint">{t.laden}</p>
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+/** DE/EN-Umschalter in der Sidebar; die Wahl ueberlebt im localStorage. */
+function SprachSchalter() {
+  const { sprache, setSprache } = useSprache();
+  return (
+    <div
+      role="group"
+      aria-label={sprache === "de" ? "Sprache" : "Language"}
+      className="mt-3 flex gap-1 px-3 max-md:flex-col max-md:px-0"
+    >
+      {(["de", "en"] as const).map((s) => (
+        <button
+          key={s}
+          onClick={() => setSprache(s)}
+          aria-pressed={sprache === s}
+          title={s === "de" ? "Deutsch" : "English"}
+          className={`rounded-md px-2 py-1 text-[11px] font-medium uppercase tracking-wide transition-colors max-md:mx-auto ${
+            sprache === s
+              ? "bg-tanne-soft text-tanne-deep"
+              : "text-ink-faint hover:bg-canvas hover:text-ink"
+          }`}
+        >
+          {s}
+        </button>
+      ))}
     </div>
   );
 }
@@ -317,10 +403,33 @@ function HilfeIcon() {
   );
 }
 
+const GATE_T = {
+  de: {
+    titel: "Zugang geschützt",
+    text: "Diese Instanz ist passwortgeschützt. Das Passwort bekommst du vom Team.",
+    platzhalter: "Passwort",
+    falsch: "Falsches Passwort.",
+    apiWeg: "API nicht erreichbar.",
+    prueft: "Prüfe…",
+    entsperren: "Entsperren",
+  },
+  en: {
+    titel: "Access protected",
+    text: "This instance is password-protected. Ask the team for the password.",
+    platzhalter: "Password",
+    falsch: "Wrong password.",
+    apiWeg: "API not reachable.",
+    prueft: "Checking…",
+    entsperren: "Unlock",
+  },
+} as const;
+
 /** Einfacher Zugriffsschutz fuers Hosting: fragt das gemeinsame Passwort ab
  *  und prueft es gegen die API. Erscheint nur, wenn das Backend mit
  *  TALENTLENS_PASSWORT gestartet wurde. */
 function PasswortGate({ onFreigabe }: { onFreigabe: () => Promise<void> }) {
+  const { sprache } = useSprache();
+  const t = GATE_T[sprache];
   const [passwort, setPasswort] = useState("");
   const [fehler, setFehler] = useState<string | null>(null);
   const [prueft, setPrueft] = useState(false);
@@ -336,9 +445,7 @@ function PasswortGate({ onFreigabe }: { onFreigabe: () => Promise<void> }) {
       await onFreigabe();
     } catch (err) {
       setFehler(
-        err instanceof ApiError && err.status === 401
-          ? "Falsches Passwort."
-          : "API nicht erreichbar.",
+        err instanceof ApiError && err.status === 401 ? t.falsch : t.apiWeg,
       );
     }
     setPrueft(false);
@@ -346,16 +453,13 @@ function PasswortGate({ onFreigabe }: { onFreigabe: () => Promise<void> }) {
 
   return (
     <form onSubmit={absenden} className="mx-auto max-w-sm py-16 text-center">
-      <p className="font-serif text-2xl italic">Zugang geschützt</p>
-      <p className="mt-2 text-sm text-ink-faint">
-        Diese Instanz ist passwortgeschützt. Das Passwort bekommst du vom
-        Team.
-      </p>
+      <p className="font-serif text-2xl italic">{t.titel}</p>
+      <p className="mt-2 text-sm text-ink-faint">{t.text}</p>
       <input
         type="password"
         value={passwort}
         onChange={(e) => setPasswort(e.target.value)}
-        placeholder="Passwort"
+        placeholder={t.platzhalter}
         autoFocus
         className="mt-6 w-full rounded-lg border border-line bg-surface px-4 py-2.5 text-sm outline-none focus:border-tanne"
       />
@@ -365,7 +469,7 @@ function PasswortGate({ onFreigabe }: { onFreigabe: () => Promise<void> }) {
         disabled={prueft || !passwort.trim()}
         className="mt-4 w-full rounded-lg bg-tanne px-5 py-2.5 text-sm font-medium text-surface transition-colors hover:bg-tanne-deep disabled:cursor-not-allowed disabled:opacity-40"
       >
-        {prueft ? "Prüfe…" : "Entsperren"}
+        {prueft ? t.prueft : t.entsperren}
       </button>
     </form>
   );

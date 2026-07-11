@@ -11,8 +11,9 @@ Die Verzweigung ist ein RunnableBranch; der Zustand fliesst als dict durch
 die Kette.
 
     Input:  {"dateien": [{"name": str, "pfad": str}], "stelle": str,
-             "kandidat": str, "ko_kriterien": {"lebenslauf_erforderlich": bool,
-                                               "motivationsschreiben_erforderlich": bool}}
+             "kandidat": str, "sprache": "de"|"en" (optional, Default "de"),
+             "ko_kriterien": {"lebenslauf_erforderlich": bool,
+                              "motivationsschreiben_erforderlich": bool}}
     Output: + dokumente, status ("genehmigt"|"abgelehnt"), ko_grund (KOGrund|None),
               bewertung (Bewertung|None), gesamt_score, empfehlung,
               korrigiert, kritik_maengel
@@ -26,7 +27,11 @@ from langchain_core.runnables import (
 )
 
 from core.anonymization import build_anonymisierungs_chain
-from core.evaluation import build_bewertungs_chain, build_kritik_chain
+from core.evaluation import (
+    SPRACHE_ANWEISUNGEN,
+    build_bewertungs_chain,
+    build_kritik_chain,
+)
 from core.extraction import extrahiere_pdf_text
 from core.klassifikation import build_klassifikations_chain
 from core.llm import get_llm
@@ -140,11 +145,18 @@ def build_screening_pipeline(llm=None) -> Runnable:
         )
         return {**state, "cv_text": cv_anonym, "motivation_text": motivation_anonym}
 
+    def _sprache_anweisung(state: dict) -> str:
+        """Ausgabesprache der Bewertung aus dem Pipeline-Input ("de"/"en")."""
+        return SPRACHE_ANWEISUNGEN.get(
+            state.get("sprache"), SPRACHE_ANWEISUNGEN["de"]
+        )
+
     def _bewerten(state: dict):
         bewertung = bewertungs_chain.invoke({
             "cv_text": state["cv_text"],
             "motivation_text": state["motivation_text"],
             "stelle": state["stelle"],
+            "sprache_anweisung": _sprache_anweisung(state),
             "hinweis": "",
         })
         if bewertung is None:
@@ -168,6 +180,7 @@ def build_screening_pipeline(llm=None) -> Runnable:
             "cv_text": state["cv_text"],
             "motivation_text": state["motivation_text"],
             "stelle": state["stelle"],
+            "sprache_anweisung": _sprache_anweisung(state),
             "hinweis": KORREKTUR_HINWEIS.format("\n- ".join(urteil.maengel)),
         })
         return {**state, "bewertung": neue_bewertung, "korrigiert": True}

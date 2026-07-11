@@ -1,5 +1,23 @@
+"use client";
+
+import { useSprache } from "@/lib/i18n";
 import type { Bewertung, Labels } from "@/lib/types";
 import { ScoreBar } from "./ui";
+
+const T = {
+  de: {
+    korrigiert:
+      "Die Selbstkritik der Pipeline hat die erste Bewertung beanstandet - dies ist die korrigierte Fassung.",
+    zitatAuf: "„",
+    zitatZu: "“",
+  },
+  en: {
+    korrigiert:
+      "The pipeline's self-critique flagged the first evaluation - this is the corrected version.",
+    zitatAuf: "“",
+    zitatZu: "”",
+  },
+} as const;
 
 export default function BewertungDetails({
   bewertung,
@@ -10,6 +28,8 @@ export default function BewertungDetails({
   labels: Labels;
   korrigiert: boolean;
 }) {
+  const { sprache } = useSprache();
+  const t = T[sprache];
   return (
     <div className="space-y-6 py-5">
       <p className="max-w-prose text-sm leading-relaxed text-ink-soft">
@@ -59,7 +79,9 @@ export default function BewertungDetails({
                 <ul className="mt-2 space-y-1 border-l border-line-strong pl-3">
                   {k.belege.map((b) => (
                     <li key={b} className="text-xs italic text-ink-faint">
-                      &bdquo;{b}&ldquo;
+                      {t.zitatAuf}
+                      {b}
+                      {t.zitatZu}
                     </li>
                   ))}
                 </ul>
@@ -70,10 +92,7 @@ export default function BewertungDetails({
       </dl>
 
       {korrigiert && (
-        <p className="text-xs text-ink-faint">
-          Die Selbstkritik der Pipeline hat die erste Bewertung beanstandet
-          - dies ist die korrigierte Fassung.
-        </p>
+        <p className="text-xs text-ink-faint">{t.korrigiert}</p>
       )}
     </div>
   );

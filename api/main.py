@@ -13,6 +13,7 @@ import json
 import os
 import secrets
 import sys
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Literal
 
@@ -37,7 +38,16 @@ from core.config import (
 from core.eingang import build_aufteilungs_chain, sortiere_pdf
 from core.llm import api_key_vorhanden, get_llm
 from core.pipeline import PIPELINE_SCHRITTE, build_screening_pipeline
-from core.schemas import DOKUMENT_LABELS, GRUND_LABELS, KO_LABELS, KRITERIUM_LABELS
+from core.schemas import (
+    DOKUMENT_LABELS,
+    DOKUMENT_LABELS_EN,
+    GRUND_LABELS,
+    GRUND_LABELS_EN,
+    KO_LABELS,
+    KO_LABELS_EN,
+    KRITERIUM_LABELS,
+    KRITERIUM_LABELS_EN,
+)
 
 app = FastAPI(title="TalentLens API")
 
@@ -60,6 +70,18 @@ _aufteilungs_chain = None
 MAX_DATEIEN_PRO_UPLOAD = 20
 MAX_DATEI_BYTES = 15 * 1024 * 1024  # 15 MB pro PDF
 
+# UI-Sprache des Aufrufers (X-Sprache-Header, vom Frontend mitgeschickt).
+# Wird pro Request in der Middleware gesetzt, damit Fehlermeldungen in der
+# Sprache des Dashboards erscheinen. Default "de" haelt CLI/Tests unveraendert.
+_SPRACHE: ContextVar[str] = ContextVar("sprache", default="de")
+
+
+def _t(de: str, en: str, sprache: str | None = None) -> str:
+    """Text in der Request-Sprache. sprache uebersteuert den Header-Wert -
+    noetig im Streaming-Endpoint, dessen Generator ausserhalb des
+    Middleware-Kontexts laeuft."""
+    return en if (sprache or _SPRACHE.get()) == "en" else de
+
 
 def _passwort() -> str:
     """Optionales Zugriffs-Passwort (fuers Hosting). Leer = kein Schutz."""
@@ -70,7 +92,9 @@ def _passwort() -> str:
 async def passwort_schutz(request: Request, call_next):
     """Ist TALENTLENS_PASSWORT gesetzt, brauchen alle Endpoints ausser
     /api/health den passenden X-Passwort-Header. Lokal ohne gesetzte
-    Variable aendert sich nichts."""
+    Variable aendert sich nichts. Setzt ausserdem die Request-Sprache
+    fuer _t() aus dem X-Sprache-Header."""
+    _SPRACHE.set("en" if request.headers.get("x-sprache") == "en" else "de")
     erwartet = _passwort()
     if (
         erwartet
@@ -81,7 +105,10 @@ async def passwort_schutz(request: Request, call_next):
         if not secrets.compare_digest(geliefert, erwartet):
             return JSONResponse(
                 status_code=401,
-                content={"detail": "Passwort fehlt oder ist falsch."},
+                content={"detail": _t(
+                    "Passwort fehlt oder ist falsch.",
+                    "Password missing or incorrect.",
+                )},
             )
     return await call_next(request)
 
@@ -100,13 +127,19 @@ def get_aufteilungs_chain():
     return _aufteilungs_chain
 
 
-def _quota_exception() -> HTTPException:
+def _quota_exception(sprache: str | None = None) -> HTTPException:
     return HTTPException(
         status_code=429,
-        detail="Gemini-Rate-Limit erreicht: Gerade laufen zu viele Anfragen "
-        "gleichzeitig. Einen Moment warten und erneut versuchen - der "
-        "Entwurf bleibt erhalten. (Tritt es dauerhaft auf: Quota-Limits "
-        "im Google-Cloud-Projekt pruefen.)",
+        detail=_t(
+            "Gemini-Rate-Limit erreicht: Gerade laufen zu viele Anfragen "
+            "gleichzeitig. Einen Moment warten und erneut versuchen - der "
+            "Entwurf bleibt erhalten. (Tritt es dauerhaft auf: Quota-Limits "
+            "im Google-Cloud-Projekt pruefen.)",
+            "Gemini rate limit reached: too many requests are running at "
+            "once. Wait a moment and try again - the draft is kept. (If it "
+            "persists: check the quota limits in the Google Cloud project.)",
+            sprache,
+        ),
     )
 
 
@@ -135,7 +168,10 @@ class EntwurfDaten(BaseModel):
 def _entwurf_oder_404(entwurf_id: int) -> dict:
     entwurf = storage.lade_entwurf(entwurf_id)
     if entwurf is None:
-        raise HTTPException(status_code=404, detail="Entwurf nicht gefunden.")
+        raise HTTPException(
+            status_code=404,
+            detail=_t("Entwurf nicht gefunden.", "Draft not found."),
+        )
     return entwurf
 
 
@@ -169,12 +205,21 @@ def konfiguration():
 
 @app.get("/api/labels")
 def labels():
-    """Anzeige-Labels fuer Enums, damit das Frontend sie nicht duplizieren muss."""
+    """Anzeige-Labels fuer Enums in beiden Sprachen, damit das Frontend sie
+    nicht duplizieren muss und der Sprachwechsel ohne Neuladen klappt."""
     return {
-        "gruende": {k.value: v for k, v in GRUND_LABELS.items()},
-        "kriterien": {k.value: v for k, v in KRITERIUM_LABELS.items()},
-        "ko": {k.value: v for k, v in KO_LABELS.items()},
-        "dokumente": {k.value: v for k, v in DOKUMENT_LABELS.items()},
+        "de": {
+            "gruende": {k.value: v for k, v in GRUND_LABELS.items()},
+            "kriterien": {k.value: v for k, v in KRITERIUM_LABELS.items()},
+            "ko": {k.value: v for k, v in KO_LABELS.items()},
+            "dokumente": {k.value: v for k, v in DOKUMENT_LABELS.items()},
+        },
+        "en": {
+            "gruende": {k.value: v for k, v in GRUND_LABELS_EN.items()},
+            "kriterien": {k.value: v for k, v in KRITERIUM_LABELS_EN.items()},
+            "ko": {k.value: v for k, v in KO_LABELS_EN.items()},
+            "dokumente": {k.value: v for k, v in DOKUMENT_LABELS_EN.items()},
+        },
     }
 
 
@@ -209,17 +254,23 @@ def dateien_hochladen(entwurf_id: int, dateien: list[UploadFile] = File(...)):
     if len(dateien) > MAX_DATEIEN_PRO_UPLOAD:
         raise HTTPException(
             status_code=413,
-            detail=f"Maximal {MAX_DATEIEN_PRO_UPLOAD} Dateien pro Upload.",
+            detail=_t(
+                f"Maximal {MAX_DATEIEN_PRO_UPLOAD} Dateien pro Upload.",
+                f"At most {MAX_DATEIEN_PRO_UPLOAD} files per upload.",
+            ),
         )
     for datei in dateien:
         if not (datei.filename or "").lower().endswith(".pdf"):
             continue
         inhalt = datei.file.read()
         if len(inhalt) > MAX_DATEI_BYTES:
+            mb = MAX_DATEI_BYTES // (1024 * 1024)
             raise HTTPException(
                 status_code=413,
-                detail=f"{datei.filename}: Datei groesser als "
-                f"{MAX_DATEI_BYTES // (1024 * 1024)} MB.",
+                detail=_t(
+                    f"{datei.filename}: Datei groesser als {mb} MB.",
+                    f"{datei.filename}: file larger than {mb} MB.",
+                ),
             )
         storage.speichere_entwurf_datei(entwurf_id, datei.filename, inhalt)
     return storage.lade_entwurf(entwurf_id)
@@ -243,19 +294,29 @@ def eingang(dateien: list[UploadFile] = File(...)):
     if len(dateien) > MAX_DATEIEN_PRO_UPLOAD:
         raise HTTPException(
             status_code=413,
-            detail=f"Maximal {MAX_DATEIEN_PRO_UPLOAD} Dateien pro Upload.",
+            detail=_t(
+                f"Maximal {MAX_DATEIEN_PRO_UPLOAD} Dateien pro Upload.",
+                f"At most {MAX_DATEIEN_PRO_UPLOAD} files per upload.",
+            ),
         )
     verarbeitet, fehler = [], []
     for datei in dateien:
         name = datei.filename or "datei.pdf"
         if not name.lower().endswith(".pdf"):
-            fehler.append({"datei": name, "meldung": "Keine PDF-Datei."})
+            fehler.append({
+                "datei": name,
+                "meldung": _t("Keine PDF-Datei.", "Not a PDF file."),
+            })
             continue
         inhalt = datei.file.read()
         if len(inhalt) > MAX_DATEI_BYTES:
+            mb = MAX_DATEI_BYTES // (1024 * 1024)
             fehler.append({
                 "datei": name,
-                "meldung": f"Datei groesser als {MAX_DATEI_BYTES // (1024 * 1024)} MB.",
+                "meldung": _t(
+                    f"Datei groesser als {mb} MB.",
+                    f"File larger than {mb} MB.",
+                ),
             })
             continue
         try:
@@ -298,16 +359,25 @@ def _analyse_eingabe(
     kandidat: str | None,
     lebenslauf_erforderlich: bool,
     motivationsschreiben_erforderlich: bool,
+    sprache: str,
 ) -> dict:
     """Entwurf validieren und den Pipeline-Input bauen (404/422 bei Problemen)."""
     entwurf = _entwurf_oder_404(entwurf_id)
     dateien = storage.entwurf_dateien(entwurf_id)
     if not dateien:
-        raise HTTPException(status_code=422, detail="Entwurf enthaelt keine PDFs.")
+        raise HTTPException(
+            status_code=422,
+            detail=_t(
+                "Entwurf enthaelt keine PDFs.",
+                "Draft contains no PDFs.",
+                sprache,
+            ),
+        )
     return {
         "dateien": [{"name": d["name"], "pfad": d["pfad"]} for d in dateien],
         "stelle": stelle,
         "kandidat": (kandidat or entwurf["kandidat"]).strip() or entwurf["kandidat"],
+        "sprache": sprache,  # Ausgabesprache der LLM-Bewertung
         "ko_kriterien": {
             "lebenslauf_erforderlich": lebenslauf_erforderlich,
             "motivationsschreiben_erforderlich": motivationsschreiben_erforderlich,
@@ -315,16 +385,18 @@ def _analyse_eingabe(
     }
 
 
-def _analyse_fehler(e: Exception) -> HTTPException:
+def _analyse_fehler(e: Exception, sprache: str | None = None) -> HTTPException:
     """Pipeline-Fehler auf verstaendliche HTTP-Fehler abbilden."""
     if isinstance(e, RuntimeError):  # z.B. fehlender API-Key
         return HTTPException(status_code=500, detail=str(e))
     if isinstance(e, ValueError):  # z.B. gescanntes PDF ohne Text
         return HTTPException(status_code=422, detail=str(e))
     if _ist_quota_fehler(e):
-        return _quota_exception()
+        return _quota_exception(sprache)
     return HTTPException(
-        status_code=502, detail=f"Analyse fehlgeschlagen: {str(e)[:300]}"
+        status_code=502,
+        detail=_t("Analyse fehlgeschlagen: ", "Analysis failed: ", sprache)
+        + str(e)[:300],
     )
 
 
@@ -357,18 +429,19 @@ def analysieren(
     kandidat: str = Form(None),
     lebenslauf_erforderlich: bool = Form(True),
     motivationsschreiben_erforderlich: bool = Form(False),
+    sprache: str = Form("de"),
 ):
     """Bewertet einen Entwurf. Synchroner Endpoint (def, nicht async)
     -> FastAPI fuehrt ihn im Threadpool aus; das Frontend ruft pro
     Bewerbung auf und zeigt so den Fortschritt pro Kandidat."""
     eingabe = _analyse_eingabe(
         entwurf_id, stelle, kandidat,
-        lebenslauf_erforderlich, motivationsschreiben_erforderlich,
+        lebenslauf_erforderlich, motivationsschreiben_erforderlich, sprache,
     )
     try:
         ergebnis = get_pipeline().invoke(eingabe)
     except Exception as e:
-        raise _analyse_fehler(e)
+        raise _analyse_fehler(e, sprache)
     return _ergebnis_speichern(entwurf_id, ergebnis)
 
 
@@ -379,6 +452,7 @@ async def analysieren_live(
     kandidat: str = Form(None),
     lebenslauf_erforderlich: bool = Form(True),
     motivationsschreiben_erforderlich: bool = Form(False),
+    sprache: str = Form("de"),
 ):
     """Wie /analysieren, aber als NDJSON-Stream: Pro abgeschlossenem
     Pipeline-Schritt kommt sofort eine Zeile {"typ": "schritt", ...} - das
@@ -388,7 +462,7 @@ async def analysieren_live(
     beim Streamen schon gesendet ist."""
     eingabe = _analyse_eingabe(
         entwurf_id, stelle, kandidat,
-        lebenslauf_erforderlich, motivationsschreiben_erforderlich,
+        lebenslauf_erforderlich, motivationsschreiben_erforderlich, sprache,
     )
 
     def zeile(daten: dict) -> str:
@@ -415,7 +489,7 @@ async def analysieren_live(
                 elif not event.get("parent_ids"):  # Wurzel-Kette: Endergebnis
                     ergebnis = event["data"].get("output")
         except Exception as e:
-            fehler = _analyse_fehler(e)
+            fehler = _analyse_fehler(e, sprache)
             yield zeile({
                 "typ": "fehler",
                 "detail": fehler.detail,
@@ -425,7 +499,11 @@ async def analysieren_live(
         if ergebnis is None:
             yield zeile({
                 "typ": "fehler",
-                "detail": "Analyse lieferte kein Ergebnis.",
+                "detail": _t(
+                    "Analyse lieferte kein Ergebnis.",
+                    "Analysis returned no result.",
+                    sprache,
+                ),
                 "status": 502,
             })
             return
@@ -451,6 +529,7 @@ class AssistentDaten(BaseModel):
     frage: str
     verlauf: list[AssistentNachricht] = []
     stelle: str = ""  # aktuell im Dashboard bearbeitete Ausschreibung
+    sprache: Literal["de", "en"] = "de"  # Antwortsprache (folgt der UI)
 
 
 @app.post("/api/assistent")
@@ -461,20 +540,30 @@ def assistent(daten: AssistentDaten):
     UI die Agent-Schritte zeigen kann."""
     frage = daten.frage.strip()
     if not frage:
-        raise HTTPException(status_code=422, detail="Frage ist leer.")
+        raise HTTPException(
+            status_code=422,
+            detail=_t("Frage ist leer.", "Question is empty.", daten.sprache),
+        )
     try:
         return beantworte_frage(
             frage,
             verlauf=[n.model_dump() for n in daten.verlauf],
             stelle=daten.stelle,
+            sprache=daten.sprache,
         )
     except RuntimeError as e:  # z.B. fehlender API-Key
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         if _ist_quota_fehler(e):
-            raise _quota_exception()
+            raise _quota_exception(daten.sprache)
         raise HTTPException(
-            status_code=502, detail=f"Assistent fehlgeschlagen: {str(e)[:300]}"
+            status_code=502,
+            detail=_t(
+                "Assistent fehlgeschlagen: ",
+                "Assistant failed: ",
+                daten.sprache,
+            )
+            + str(e)[:300],
         )
 
 

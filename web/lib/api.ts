@@ -1,8 +1,9 @@
+import type { Sprache } from "./i18n";
 import type {
+  AlleLabels,
   AssistentAntwort,
   Entwurf,
   Konfiguration,
-  Labels,
   LiveEreignis,
   ScreeningErgebnis,
   VerlaufEintrag,
@@ -32,10 +33,23 @@ function passwortHeader(): Record<string, string> {
   return passwort ? { "X-Passwort": passwort } : {};
 }
 
+// UI-Sprache mitschicken, damit Backend-Fehlermeldungen zur Sprache des
+// Dashboards passen (Key wie in lib/i18n.tsx; ohne Auswahl gilt Englisch,
+// wie im SpracheProvider).
+function spracheHeader(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const sprache = localStorage.getItem("tl.sprache");
+  return { "X-Sprache": sprache === "de" ? "de" : "en" };
+}
+
 function api(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(path, {
     ...init,
-    headers: { ...(init.headers as Record<string, string>), ...passwortHeader() },
+    headers: {
+      ...(init.headers as Record<string, string>),
+      ...passwortHeader(),
+      ...spracheHeader(),
+    },
   });
 }
 
@@ -55,7 +69,7 @@ export async function fetchStelle(): Promise<string> {
   return data.text;
 }
 
-export async function fetchLabels(): Promise<Labels> {
+export async function fetchLabels(): Promise<AlleLabels> {
   return json(await api("/api/labels"));
 }
 
@@ -151,12 +165,13 @@ export async function frageAssistent(
   frage: string,
   verlauf: { rolle: "nutzer" | "assistent"; text: string }[],
   stelle: string,
+  sprache: Sprache,
 ): Promise<AssistentAntwort> {
   return json(
     await api("/api/assistent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ frage, verlauf, stelle }),
+      body: JSON.stringify({ frage, verlauf, stelle, sprache }),
     }),
   );
 }
@@ -166,6 +181,7 @@ export interface AnalyseOptionen {
   stelle: string;
   lebenslaufErforderlich: boolean;
   motivationsschreibenErforderlich: boolean;
+  sprache: Sprache; // Ausgabesprache der LLM-Bewertung
 }
 
 function analyseForm(opts: AnalyseOptionen): FormData {
@@ -177,6 +193,7 @@ function analyseForm(opts: AnalyseOptionen): FormData {
     "motivationsschreiben_erforderlich",
     String(opts.motivationsschreibenErforderlich),
   );
+  form.set("sprache", opts.sprache);
   return form;
 }
 
@@ -233,5 +250,10 @@ export async function analysiereEntwurfLive(
   }
   // Stream endete ohne Ergebnis-Zeile (Verbindungsabbruch) - der Aufrufer
   // versucht dann, das Ergebnis aus dem Verlauf nachzuladen.
-  throw new ApiError("Verbindung waehrend der Analyse abgebrochen.", 0);
+  throw new ApiError(
+    opts.sprache === "de"
+      ? "Verbindung während der Analyse abgebrochen."
+      : "Connection lost during analysis.",
+    0,
+  );
 }
