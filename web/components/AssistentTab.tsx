@@ -13,11 +13,14 @@ import { Spinner } from "./ui";
 
 const T = {
   de: {
+    // Bewusst ohne Namen: So passen die Beispiele zu jedem Datenbestand und
+    // koennen nicht veralten. "Die zwei besten" zwingt den Agenten ausserdem
+    // zu zwei Schritten (erst nachschlagen, dann vergleichen).
     beispielFragen: [
       "Wer sind die besten Kandidaten und warum?",
-      "Warum ist Ben Keller rausgeflogen?",
-      "Vergleiche Anna Schmidt und David Okafor bei den Skills.",
+      "Vergleiche die zwei besten Kandidaten bei den Skills. Wen soll ich nehmen?",
       "Woran scheitern die meisten Bewerbungen?",
+      "Welche Kandidaten wurden per K.O.-Kriterium abgelehnt?",
     ],
     introVor: "Freie Fragen zu den Screening-Ergebnissen. Hier arbeitet ein ",
     introAgent: "Agent",
@@ -37,9 +40,9 @@ const T = {
   en: {
     beispielFragen: [
       "Who are the best candidates and why?",
-      "Why was Ben Keller rejected?",
-      "Compare Anna Schmidt and David Okafor on skills.",
+      "Compare the top two candidates on their skills. Who should I pick?",
       "What do most applications fail on?",
+      "Which candidates were rejected by a knockout criterion?",
     ],
     introVor: "Ask free-form questions about the screening results. This is an ",
     introAgent: "agent",
